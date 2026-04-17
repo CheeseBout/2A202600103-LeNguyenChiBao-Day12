@@ -1,100 +1,124 @@
-# Lab 12 — Complete Production Agent
+# Day 12 - Production Ready AI Agent
 
-Kết hợp TẤT CẢ những gì đã học trong 1 project hoàn chỉnh.
+Final lab implementation combining all concepts:
 
-## Checklist Deliverable
+- API key authentication
+- Rate limiting: 10 requests / 60 seconds / user
+- Cost guard: 10 USD monthly budget / user (with global budget guard)
+- Health and readiness probes
+- Graceful shutdown (SIGTERM/SIGINT)
+- Stateless session history in Redis
+- Structured JSON logging
+- Multi-stage Docker build
+- Nginx + agent + Redis full stack
 
-- [x] Dockerfile (multi-stage, < 500 MB)
-- [x] docker-compose.yml (agent + redis)
-- [x] .dockerignore
-- [x] Health check endpoint (`GET /health`)
-- [x] Readiness endpoint (`GET /ready`)
-- [x] API Key authentication
-- [x] Rate limiting
-- [x] Cost guard
-- [x] Config từ environment variables
-- [x] Structured logging
-- [x] Graceful shutdown
-- [x] Public URL ready (Railway / Render config)
-
----
-
-## Cấu Trúc
+## Project Structure
 
 ```
 06-lab-complete/
 ├── app/
-│   ├── main.py         # Entry point — kết hợp tất cả
-│   ├── config.py       # 12-factor config
-│   ├── auth.py         # API Key + JWT
-│   ├── rate_limiter.py # Rate limiting
-│   └── cost_guard.py   # Budget protection
-├── Dockerfile          # Multi-stage, production-ready
-├── docker-compose.yml  # Full stack
-├── railway.toml        # Deploy Railway
-├── render.yaml         # Deploy Render
-├── .env.example        # Template
+│   ├── main.py
+│   ├── config.py
+│   ├── auth.py
+│   ├── rate_limiter.py
+│   └── cost_guard.py
+├── utils/
+│   └── mock_llm.py
+├── Dockerfile
+├── docker-compose.yml
+├── nginx.conf
+├── requirements.txt
+├── .env.example
 ├── .dockerignore
-└── requirements.txt
+├── railway.toml
+└── render.yaml
 ```
 
----
+## Local Run with Docker Compose
 
-## Chạy Local
+1. Copy environment file:
 
 ```bash
-# 1. Setup
 cp .env.example .env
+```
 
-# 2. Chạy với Docker Compose
-docker compose up
+2. Start stack:
 
-# 3. Test
+```bash
+docker compose up --build
+```
+
+3. Optional scaling test:
+
+```bash
+docker compose up --build --scale agent=3
+```
+
+4. Test endpoints:
+
+```bash
+# Liveness
 curl http://localhost/health
 
-# 4. Lấy API key từ .env, test endpoint
-API_KEY=$(grep AGENT_API_KEY .env | cut -d= -f2)
-curl -H "X-API-Key: $API_KEY" \
-     -X POST http://localhost/ask \
-     -H "Content-Type: application/json" \
-     -d '{"question": "What is deployment?"}'
+# Readiness
+curl http://localhost/ready
+
+# Ask API (replace API key)
+curl -X POST http://localhost/ask \
+  -H "X-API-Key: replace-with-strong-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"student1","question":"What is Docker?","session_id":"s1"}'
 ```
 
----
+## Local Run without Docker
 
-## Deploy Railway (< 5 phút)
+1. Install dependencies:
 
 ```bash
-# Cài Railway CLI
-npm i -g @railway/cli
-
-# Login và deploy
-railway login
-railway init
-railway variables set OPENAI_API_KEY=sk-...
-railway variables set AGENT_API_KEY=your-secret-key
-railway up
-
-# Nhận public URL!
-railway domain
+pip install -r requirements.txt
 ```
 
----
+2. Start Redis locally.
 
-## Deploy Render
+3. Export environment variables (or use .env loader in your shell), then run:
 
-1. Push repo lên GitHub
-2. Render Dashboard → New → Blueprint
-3. Connect repo → Render đọc `render.yaml`
-4. Set secrets: `OPENAI_API_KEY`, `AGENT_API_KEY`
-5. Deploy → Nhận URL!
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
----
+## Security and Reliability Notes
 
-## Kiểm Tra Production Readiness
+- No hardcoded production secrets in source code.
+- In production, AGENT_API_KEY must be set.
+- Readiness returns 503 while shutting down or when Redis is unavailable.
+- Session state is saved in Redis using key prefix session:<session_id>:history.
+- Shutdown waits for in-flight requests up to SHUTDOWN_GRACE_SECONDS.
+
+## Deployment
+
+### Railway
+
+- Uses Dockerfile build and start command from railway.toml.
+- Set variables at minimum:
+  - PORT
+  - REDIS_URL
+  - AGENT_API_KEY
+  - RATE_LIMIT_PER_MINUTE
+  - MONTHLY_BUDGET_USD
+
+### Render
+
+- Uses render.yaml blueprint.
+- Add secret values for:
+  - OPENAI_API_KEY (optional in mock mode)
+  - AGENT_API_KEY
+
+## Validation Script
+
+Run the built-in checker:
 
 ```bash
 python check_production_ready.py
 ```
 
-Script này kiểm tra tất cả items trong checklist và báo cáo những gì còn thiếu.
+This verifies required files, endpoint presence, security checks, and Docker best practices.
